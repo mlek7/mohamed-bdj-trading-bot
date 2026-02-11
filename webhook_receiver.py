@@ -139,7 +139,7 @@ def format_enhanced_signal(data, targets):
     signal_type = data.get('signal_type', 'SMC Signal')
     timeframe = data.get('timeframe', '15')
     time = data.get('time', datetime.now().strftime('%Y-%m-%d %H:%M'))
-    return f"""🚨 **MOHAMED BDJ STRATEGY** 🚨\n{emoji} **{direction}** {pair}\n━━━━━━━━━━━━━━━\n📊 {signal_type}\n⏰ {timeframe}m | {time}\n💎 SMC ANALYSIS:\n✓ LuxAlgo SMC | ✓ ICT Killzone\n✓ Market Structure | ✓ Liquidity Sweep\n━━━━━━━━━━━━━━━\n🎯 ENTRY ZONE: {targets['entry_zone_low']}-{targets['entry_zone_high']}\n🔸 ENTRY: {targets['entry']}\n🛑 STOP LOSS: {targets['sl']} ({targets['sl_pips']} pips)\n📈 TARGETS:\n📍 TP1: {targets['tp1']} (1:2) PARTIAL\n📍 TP2: {targets['tp2']} (1:3) MAIN\n📍 TP3: {targets['tp3']} (1:4) EXTENDED\n━━━━━━━━━━━━━━━\n⚠️ RISK: 1-2% | 50% at TP1\nMove SL to BE after TP1 | Trail after TP2\n#MohamedBDJ #SMC #ICT"""
+    return f"""🚨 **TRADING SIGNALS GR STRATEGY** 🚨\n{emoji} **{direction}** {pair}\n━━━━━━━━━━━━━━━\n📊 {signal_type}\n⏰ {timeframe}m | {time}\n💎 SMC ANALYSIS:\n✓ LuxAlgo SMC | ✓ ICT Killzone\n✓ Market Structure | ✓ Liquidity Sweep\n━━━━━━━━━━━━━━━\n🎯 ENTRY ZONE: {targets['entry_zone_low']}-{targets['entry_zone_high']}\n🔸 ENTRY: {targets['entry']}\n🛑 STOP LOSS: {targets['sl']} ({targets['sl_pips']} pips)\n📈 TARGETS:\n📍 TP1: {targets['tp1']} (1:2) PARTIAL\n📍 TP2: {targets['tp2']} (1:3) MAIN\n📍 TP3: {targets['tp3']} (1:4) EXTENDED\n━━━━━━━━━━━━━━━\n⚠️ RISK: 1-2% | 50% at TP1\nMove SL to BE after TP1 | Trail after TP2\n#TradingSignalsGR #SMC #ICT"""
 
 def send_telegram_message(message, chat_id):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -161,7 +161,7 @@ def broadcast_message(message):
 
 @app.route('/')
 def home():
-    return f"Mohamed BDJ Bot Running! Subscribers: {len(load_subscribers())}"
+    return f"TRADING SIGNALS GR Bot Running! Subscribers: {len(load_subscribers())}"
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -198,7 +198,7 @@ def telegram_webhook():
             text = update['message'].get('text', '')
             if text == '/start':
                 add_subscriber(chat_id)
-                send_telegram_message("✅ Welcome! You'll receive Mohamed BDJ trading signals. Send /stop to unsubscribe.", chat_id)
+                send_telegram_message("✅ Welcome! You'll receive TRADING SIGNALS GR trading signals. Send /stop to unsubscribe.", chat_id)
             elif text == '/stop':
                 remove_subscriber(chat_id)
                 send_telegram_message("Unsubscribed. Send /start to resubscribe.", chat_id)
