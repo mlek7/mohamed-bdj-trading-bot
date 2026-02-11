@@ -3,53 +3,77 @@ import requests
 import os
 from datetime import datetime
 import re
+import json
 
 app = Flask(__name__)
 
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
-CHAT_ID = os.getenv('CHAT_ID', '')
+SUBSCRIBERS_FILE = 'subscribers.json'
+
+# Load subscribers from file
+def load_subscribers():
+    try:
+        if os.path.exists(SUBSCRIBERS_FILE):
+            with open(SUBSCRIBERS_FILE, 'r') as f:
+                return json.load(f)
+        return []
+    except:
+        return []
+
+# Save subscribers to file  
+def save_subscribers(subscribers):
+    try:
+        with open(SUBSCRIBERS_FILE, 'w') as f:
+            json.dump(subscribers, f)
+    except Exception as e:
+        print(f"Error saving subscribers: {e}")
+
+# Add subscriber
+def add_subscriber(chat_id):
+    subscribers = load_subscribers()
+    if chat_id not in subscribers:
+        subscribers.append(chat_id)
+        save_subscribers(subscribers)
+        return True
+    return False
+
+# Remove subscriber
+def remove_subscriber(chat_id):
+    subscribers = load_subscribers()
+    if chat_id in subscribers:
+        subscribers.remove(chat_id)
+        save_subscribers(subscribers)
+        return True
+    return False
 
 def get_pip_value(pair):
-    """Get pip value based on trading pair"""
     if 'JPY' in pair:
-        return 0.01  # JPY pairs
+        return 0.01
     elif 'XAU' in pair or 'GOLD' in pair:
-        return 0.1   # Gold
+        return 0.1
     elif 'BTC' in pair:
-        return 1.0   # Bitcoin
+        return 1.0
     else:
-        return 0.0001  # Standard forex pairs
+        return 0.0001
 
 def calculate_targets_smc(entry, sl, direction, pair):
-    """
-    Calculate entry zone, stop loss, and multiple take profits
-    based on Smart Money Concepts risk management
-    """
     try:
         entry_price = float(entry)
         sl_price = float(sl)
         pip_value = get_pip_value(pair)
-        
-        # Calculate stop loss distance in pips
         sl_distance = abs(entry_price - sl_price)
         sl_pips = sl_distance / pip_value
-        
-        # Calculate entry zone (range around entry point)
-        entry_zone_range = sl_distance * 0.2  # 20% of SL distance
+        entry_zone_range = sl_distance * 0.2
         entry_zone_low = entry_price - entry_zone_range
         entry_zone_high = entry_price + entry_zone_range
-        
-        # Calculate take profit levels based on risk-reward ratios
         if direction == "BUY":
-            tp1 = entry_price + (sl_distance * 2)   # 1:2 RR
-            tp2 = entry_price + (sl_distance * 3)   # 1:3 RR
-            tp3 = entry_price + (sl_distance * 4)   # 1:4 RR
-        else:  # SELL
+            tp1 = entry_price + (sl_distance * 2)
+            tp2 = entry_price + (sl_distance * 3)
+            tp3 = entry_price + (sl_distance * 4)
+        else:
             tp1 = entry_price - (sl_distance * 2)
             tp2 = entry_price - (sl_distance * 3)
             tp3 = entry_price - (sl_distance * 4)
-        
-        # Format based on pair type
         if 'JPY' in pair:
             decimals = 2
         elif 'XAU' in pair or 'GOLD' in pair:
@@ -58,7 +82,6 @@ def calculate_targets_smc(entry, sl, direction, pair):
             decimals = 0
         else:
             decimals = 5
-        
         return {
             'entry_zone_low': round(entry_zone_low, decimals),
             'entry_zone_high': round(entry_zone_high, decimals),
@@ -76,40 +99,25 @@ def calculate_targets_smc(entry, sl, direction, pair):
         return None
 
 def extract_signal_data(message):
-    """
-    Extract trading signal data from TradingView alert message
-    """
     data = {}
-    
-    # Extract pair
     pair_match = re.search(r'Pair[:\s]+([A-Z0-9]+)', message, re.IGNORECASE)
     if pair_match:
         data['pair'] = pair_match.group(1)
-    
-    # Extract price
     price_match = re.search(r'Price[:\s]+([0-9.,]+)', message, re.IGNORECASE)
     if price_match:
         data['price'] = price_match.group(1).replace(',', '')
-    
-    # Extract timeframe
     tf_match = re.search(r'Timeframe[:\s]+(\d+)', message, re.IGNORECASE)
     if tf_match:
         data['timeframe'] = tf_match.group(1)
-    
-    # Extract time
     time_match = re.search(r'Time[:\s]+([\d\-:\s]+)', message, re.IGNORECASE)
     if time_match:
         data['time'] = time_match.group(1)
-    
-    # Determine signal type
     if 'BULLISH' in message.upper() or 'BUY' in message.upper():
         data['direction'] = 'BUY'
         data['emoji'] = '🟢'
     else:
         data['direction'] = 'SELL'
         data['emoji'] = '🔴'
-    
-    # Extract signal type
     if 'BOS' in message:
         data['signal_type'] = 'Break of Structure (BOS)'
     elif 'CHOCH' in message:
@@ -120,134 +128,83 @@ def extract_signal_data(message):
         data['signal_type'] = 'Fair Value Gap'
     else:
         data['signal_type'] = 'SMC Signal'
-    
     return data
 
 def format_enhanced_signal(data, targets):
-    """
-    Format the trading signal with full SMC analysis
-    """
     if not targets:
         return "⚠️ Error calculating trade levels"
-    
     pair = data.get('pair', 'Unknown')
     direction = data.get('direction', 'BUY')
     emoji = data.get('emoji', '🟢')
     signal_type = data.get('signal_type', 'SMC Signal')
     timeframe = data.get('timeframe', '15')
     time = data.get('time', datetime.now().strftime('%Y-%m-%d %H:%M'))
-    
-    message = f"""🚨 **MOHAMED BDJ STRATEGY SIGNAL** 🚨
+    return f"""🚨 **MOHAMED BDJ STRATEGY** 🚨\n{emoji} **{direction}** {pair}\n━━━━━━━━━━━━━━━\n📊 {signal_type}\n⏰ {timeframe}m | {time}\n💎 SMC ANALYSIS:\n✓ LuxAlgo SMC | ✓ ICT Killzone\n✓ Market Structure | ✓ Liquidity Sweep\n━━━━━━━━━━━━━━━\n🎯 ENTRY ZONE: {targets['entry_zone_low']}-{targets['entry_zone_high']}\n🔸 ENTRY: {targets['entry']}\n🛑 STOP LOSS: {targets['sl']} ({targets['sl_pips']} pips)\n📈 TARGETS:\n📍 TP1: {targets['tp1']} (1:2) PARTIAL\n📍 TP2: {targets['tp2']} (1:3) MAIN\n📍 TP3: {targets['tp3']} (1:4) EXTENDED\n━━━━━━━━━━━━━━━\n⚠️ RISK: 1-2% | 50% at TP1\nMove SL to BE after TP1 | Trail after TP2\n#MohamedBDJ #SMC #ICT"""
 
-{emoji} **{direction}** {pair}
-━━━━━━━━━━━━━━━━━━━━━
-
-📊 **SIGNAL TYPE:** {signal_type}
-⏰ **TIMEFRAME:** {timeframe} minutes
-🕐 **TIME:** {time}
-
-💎 **SMART MONEY ANALYSIS:**
-✓ LuxAlgo SMC Confirmed
-✓ ICT Killzone Active
-✓ Market Structure Aligned
-✓ Liquidity Sweep Detected
-
-━━━━━━━━━━━━━━━━━━━━━
-
-🎯 **ENTRY ZONE:** {targets['entry_zone_low']} - {targets['entry_zone_high']}
-🔸 **OPTIMAL ENTRY:** {targets['entry']}
-
-🛑 **STOP LOSS:** {targets['sl']} ({targets['sl_pips']} pips)
-
-📈 **TARGETS:**
-📍 TP1: {targets['tp1']} (1:2 RR - {targets['tp1_pips']} pips) - PARTIAL EXIT
-📍 TP2: {targets['tp2']} (1:3 RR - {targets['tp2_pips']} pips) - MAIN EXIT  
-📍 TP3: {targets['tp3']} (1:4 RR - {targets['tp3_pips']} pips) - EXTENDED
-
-━━━━━━━━━━━━━━━━━━━━━
-
-⚠️ **RISK MANAGEMENT:**
-• Max Risk: 1-2% per trade
-• Take 50% profit at TP1
-• Move SL to breakeven after TP1
-• Trail stop after TP2
-
-💡 Monitor for:
-- Order Block reactions
-- Liquidity grabs
-- Fair Value Gap fills
-- Session momentum shifts
-
-#MohamedBDJ #SmartMoneyConcepts #ICT
-"""
-    return message
-
-def send_telegram_message(message):
-    """Send message to Telegram"""
+def send_telegram_message(message, chat_id):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {
-        'chat_id': CHAT_ID,
-        'text': message,
-        'parse_mode': 'Markdown'
-    }
     try:
-        response = requests.post(url, json=payload)
+        response = requests.post(url, json={'chat_id': chat_id, 'text': message, 'parse_mode': 'Markdown'}, timeout=5)
         return response.json()
     except Exception as e:
-        print(f"Error sending message: {e}")
+        print(f"Error sending to {chat_id}: {e}")
         return None
+
+def broadcast_message(message):
+    subscribers = load_subscribers()
+    success_count = 0
+    for chat_id in subscribers:
+        if send_telegram_message(message, chat_id):
+            success_count += 1
+    return success_count
+    return success_count
 
 @app.route('/')
 def home():
-    return "Mohamed BDJ Trading Bot is Running! ✓"
+    return f"Mohamed BDJ Bot Running! Subscribers: {len(load_subscribers())}"
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
     try:
-        # Get the alert message
         if request.is_json:
-            data = request.get_json()
-            message = str(data)
+            message = str(request.get_json())
         else:
             message = request.data.decode('utf-8')
-        
-        # Extract signal data
         signal_data = extract_signal_data(message)
-        
-        # Get pair for calculations
         pair = signal_data.get('pair', 'EURUSD')
         price = signal_data.get('price', '1.18000')
         direction = signal_data.get('direction', 'BUY')
-        
-        # Calculate stop loss (example: 20 pips for forex, adjust based on your strategy)
         pip_value = get_pip_value(pair)
-        sl_distance = 20 * pip_value  # 20 pips
-        
+        sl_distance = 20 * pip_value
         if direction == 'BUY':
             entry = float(price)
             sl = entry - sl_distance
         else:
             entry = float(price)
             sl = entry + sl_distance
-        
-        # Calculate targets
         targets = calculate_targets_smc(entry, sl, direction, pair)
-        
-        # Format and send message
         formatted_message = format_enhanced_signal(signal_data, targets)
-        result = send_telegram_message(formatted_message)
-        
-        return jsonify({
-            'status': 'success',
-            'message': 'Signal sent to Telegram',
-            'telegram_response': result
-        }), 200
-        
+        sent_count = broadcast_message(formatted_message)
+        return jsonify({'status': 'success', 'sent_to': sent_count}), 200
     except Exception as e:
-        error_msg = f"Error processing webhook: {str(e)}"
-        print(error_msg)
-        return jsonify({'status': 'error', 'message': error_msg}), 500
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/telegram', methods=['POST'])
+def telegram_webhook():
+    try:
+        update = request.get_json()
+        if 'message' in update:
+            chat_id = update['message']['chat']['id']
+            text = update['message'].get('text', '')
+            if text == '/start':
+                add_subscriber(chat_id)
+                send_telegram_message("✅ Welcome! You'll receive Mohamed BDJ trading signals. Send /stop to unsubscribe.", chat_id)
+            elif text == '/stop':
+                remove_subscriber(chat_id)
+                send_telegram_message("Unsubscribed. Send /start to resubscribe.", chat_id)
+        return jsonify({'ok': True}), 200
+    except:
+        return jsonify({'ok': False}), 500
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
