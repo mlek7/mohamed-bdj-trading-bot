@@ -242,7 +242,8 @@ def webhook():
             
         signal_data = extract_signal_data(message_raw)
         pair = signal_data.get('pair', 'EURUSD')
-        price = float(signal_data.get('price', '1.18000'))
+        price_str = signal_data.get('price', '1.18000')
+        price = float(price_str)
         direction = signal_data.get('direction', 'BUY')
         
         # Default SL distance (20 pips) if not specified in alert
@@ -276,9 +277,8 @@ def telegram_webhook():
                 add_subscriber(chat_id)
                 send_telegram_message("✅ Welcome to *TRADING SIGNALS GR*! You'll receive professional SMC trading signals. Send /stop to unsubscribe.", chat_id)
             elif text == '/stop':
-                remove_subscriber(chat_id)
-                send_telegram_message("Unsubscribed from TRADING SIGNALS GR. Send /start to resubscribe.", chat_id)
-            elif text == '/status':
+                remove_subscriber(c                send_telegram_message(f"📊 Bot Status: Running
+Recipients: {len(recipients)}", chat_id)
                 recipients = get_all_recipients()
                 send_telegram_message(f"📊 Bot Status: Running
 Recipients: {len(recipients)}", chat_id)
