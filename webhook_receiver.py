@@ -4,10 +4,13 @@ import os
 from datetime import datetime
 import re
 import json
+import threading
+import time
 
 app = Flask(__name__)
 
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
+CHAT_ID = os.getenv('CHAT_ID', '')
 SUBSCRIBERS_FILE = 'subscribers.json'
 
 # Load subscribers from file
@@ -20,13 +23,22 @@ def load_subscribers():
     except:
         return []
 
-# Save subscribers to file  
+# Save subscribers to file
 def save_subscribers(subscribers):
     try:
         with open(SUBSCRIBERS_FILE, 'w') as f:
             json.dump(subscribers, f)
     except Exception as e:
         print(f"Error saving subscribers: {e}")
+
+# Get all recipients (owner CHAT_ID + subscribers)
+def get_all_recipients():
+    subscribers = load_subscribers()
+    recipients = list(subscribers)
+    # Always include owner CHAT_ID as permanent recipient
+    if CHAT_ID and CHAT_ID not in recipients:
+        recipients.append(CHAT_ID)
+    return recipients
 
 # Add subscriber
 def add_subscriber(chat_id):
@@ -114,10 +126,10 @@ def extract_signal_data(message):
         data['time'] = time_match.group(1)
     if 'BULLISH' in message.upper() or 'BUY' in message.upper():
         data['direction'] = 'BUY'
-        data['emoji'] = '🟢'
+        data['emoji'] = '\U0001f7e2'
     else:
         data['direction'] = 'SELL'
-        data['emoji'] = '🔴'
+        data['emoji'] = '\U0001f534'
     if 'BOS' in message:
         data['signal_type'] = 'Break of Structure (BOS)'
     elif 'CHOCH' in message:
@@ -132,14 +144,33 @@ def extract_signal_data(message):
 
 def format_enhanced_signal(data, targets):
     if not targets:
-        return "⚠️ Error calculating trade levels"
+        return "\u26a0\ufe0f Error calculating trade levels"
     pair = data.get('pair', 'Unknown')
     direction = data.get('direction', 'BUY')
-    emoji = data.get('emoji', '🟢')
+    emoji = data.get('emoji', '\U0001f7e2')
     signal_type = data.get('signal_type', 'SMC Signal')
     timeframe = data.get('timeframe', '15')
     time = data.get('time', datetime.now().strftime('%Y-%m-%d %H:%M'))
-    return f"""🚨 **TRADING SIGNALS GR STRATEGY** 🚨\n{emoji} **{direction}** {pair}\n━━━━━━━━━━━━━━━\n📊 {signal_type}\n⏰ {timeframe}m | {time}\n💎 SMC ANALYSIS:\n✓ LuxAlgo SMC | ✓ ICT Killzone\n✓ Market Structure | ✓ Liquidity Sweep\n━━━━━━━━━━━━━━━\n🎯 ENTRY ZONE: {targets['entry_zone_low']}-{targets['entry_zone_high']}\n🔸 ENTRY: {targets['entry']}\n🛑 STOP LOSS: {targets['sl']} ({targets['sl_pips']} pips)\n📈 TARGETS:\n📍 TP1: {targets['tp1']} (1:2) PARTIAL\n📍 TP2: {targets['tp2']} (1:3) MAIN\n📍 TP3: {targets['tp3']} (1:4) EXTENDED\n━━━━━━━━━━━━━━━\n⚠️ RISK: 1-2% | 50% at TP1\nMove SL to BE after TP1 | Trail after TP2\n#TradingSignalsGR #SMC #ICT"""
+    return f"""\U0001f6a8 *TRADING SIGNALS GR STRATEGY* \U0001f6a8
+{emoji} *{direction}* {pair}
+\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+\U0001f4ca {signal_type}
+\u23f0 {timeframe}m | {time}
+\U0001f48e SMC ANALYSIS:
+\u2713 LuxAlgo SMC | \u2713 ICT Killzone
+\u2713 Market Structure | \u2713 Liquidity Sweep
+\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+\U0001f3af ENTRY ZONE: {targets['entry_zone_low']}-{targets['entry_zone_high']}
+\U0001f538 ENTRY: {targets['entry']}
+\U0001f6d1 STOP LOSS: {targets['sl']} ({targets['sl_pips']} pips)
+\U0001f4c8 TARGETS:
+\U0001f4cd TP1: {targets['tp1']} (1:2) PARTIAL
+\U0001f4cd TP2: {targets['tp2']} (1:3) MAIN
+\U0001f4cd TP3: {targets['tp3']} (1:4) EXTENDED
+\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+\u26a0\ufe0f RISK: 1-2% | 50% at TP1
+Move SL to BE after TP1 | Trail after TP2
+#TradingSignalsGR #SMC #ICT"""
 
 def send_telegram_message(message, chat_id):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -151,17 +182,32 @@ def send_telegram_message(message, chat_id):
         return None
 
 def broadcast_message(message):
-    subscribers = load_subscribers()
+    recipients = get_all_recipients()
     success_count = 0
-    for chat_id in subscribers:
-        if send_telegram_message(message, chat_id):
+    for chat_id in recipients:
+        result = send_telegram_message(message, chat_id)
+        if result and result.get('ok'):
             success_count += 1
+    print(f"Broadcast sent to {success_count}/{len(recipients)} recipients")
     return success_count
-    return success_count
+
+def set_telegram_webhook():
+    """Auto-set Telegram webhook on startup"""
+    if not TELEGRAM_BOT_TOKEN:
+        return
+    webhook_url = f"https://mohamed-bdj-trading-bot.onrender.com/telegram"
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setWebhook"
+    try:
+        response = requests.post(url, json={'url': webhook_url}, timeout=10)
+        result = response.json()
+        print(f"Telegram webhook set: {result}")
+    except Exception as e:
+        print(f"Error setting webhook: {e}")
 
 @app.route('/')
 def home():
-    return f"TRADING SIGNALS GR Bot Running! Subscribers: {len(load_subscribers())}"
+    recipients = get_all_recipients()
+    return f"TRADING SIGNALS GR Bot Running! Recipients: {len(recipients)}"
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -198,13 +244,18 @@ def telegram_webhook():
             text = update['message'].get('text', '')
             if text == '/start':
                 add_subscriber(chat_id)
-                send_telegram_message("✅ Welcome! You'll receive TRADING SIGNALS GR trading signals. Send /stop to unsubscribe.", chat_id)
+                send_telegram_message("\u2705 Welcome to *TRADING SIGNALS GR*! You'll receive professional SMC trading signals. Send /stop to unsubscribe.", chat_id)
             elif text == '/stop':
                 remove_subscriber(chat_id)
-                send_telegram_message("Unsubscribed. Send /start to resubscribe.", chat_id)
+                send_telegram_message("Unsubscribed from TRADING SIGNALS GR. Send /start to resubscribe.", chat_id)
+            elif text == '/status':
+                recipients = get_all_recipients()
+                send_telegram_message(f"\U0001f4ca Bot Status: Running\nRecipients: {len(recipients)}", chat_id)
         return jsonify({'ok': True}), 200
     except:
         return jsonify({'ok': False}), 500
 
 if __name__ == '__main__':
+    # Auto-set Telegram webhook on startup
+    threading.Thread(target=set_telegram_webhook, daemon=True).start()
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
